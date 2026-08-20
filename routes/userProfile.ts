@@ -21,6 +21,35 @@ function favicon () {
   return utils.extractFilename(config.get('application.favicon'))
 }
 
+function safeEval (code: string): any {
+  const trimmed = code.trim()
+
+  // 1. Safe string literal check: starts and ends with same quote character (', ", `)
+  if (
+    (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith('`') && trimmed.endsWith('`'))
+  ) {
+    let inner = trimmed.slice(1, -1)
+    const quoteChar = trimmed[0]
+    if (quoteChar === '`') {
+      inner = inner.replace(/\\`/g, '`')
+    } else if (quoteChar === "'") {
+      inner = inner.replace(/\\'/g, "'")
+    } else if (quoteChar === '"') {
+      inner = inner.replace(/\\"/g, '"')
+    }
+    return inner.replace(/\\\\/g, '\\')
+  }
+
+  // 2. Safe math expression check: digits, whitespace, operators: +, -, *, /, %, (, )
+  if (/^[0-9+\-*/%()\s]+$/.test(trimmed)) {
+    return Function(`"use strict"; return (${trimmed})`)()
+  }
+
+  throw new Error('Unsafe expression in username')
+}
+
 export function getUserProfile () {
   return async (req: Request, res: Response, next: NextFunction) => {
     let template: string
@@ -58,12 +87,12 @@ export function getUserProfile () {
         if (!code) {
           throw new Error('Username is null')
         }
-        username = eval(code) // eslint-disable-line no-eval
+        username = safeEval(code)
       } catch (err) {
-        username = '\\' + username
+        username = '\\\\' + username
       }
     } else {
-      username = '\\' + username
+      username = '\\\\' + username
     }
 
     const themeKey = config.get<string>('application.theme') as keyof typeof themes
