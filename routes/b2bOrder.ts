@@ -13,10 +13,56 @@ import { challenges } from '../data/datacache'
 import * as security from '../lib/insecurity'
 import * as utils from '../lib/utils'
 
+function containsDangerousContent (input: string): boolean {
+  const blacklist = [
+    'constructor',
+    'prototype',
+    '__proto__',
+    'process',
+    'global',
+    'function',
+    'require',
+    'import',
+    'module',
+    'exec',
+    'spawn',
+    'child_process',
+    'source',
+    'getprototypeof',
+    'getownproperty',
+    'defineproperty',
+    'reflect',
+    'proxy',
+    'object',
+    'string',
+    'fromcharcode',
+    'atob',
+    'btoa',
+    'eval'
+  ]
+  const normalized = input.toLowerCase()
+  if (/[\\'"\x60]/.test(input)) {
+    return true
+  }
+  for (const term of blacklist) {
+    if (normalized.includes(term)) {
+      return true
+    }
+  }
+  if (/\bthis\b/i.test(input)) {
+    return true
+  }
+  return false
+}
+
 export function b2bOrder () {
   return ({ body }: Request, res: Response, next: NextFunction) => {
     if (utils.isChallengeEnabled(challenges.rceChallenge) || utils.isChallengeEnabled(challenges.rceOccupyChallenge)) {
       const orderLinesData = body.orderLinesData || ''
+      if (containsDangerousContent(orderLinesData)) {
+        res.status(400).send('Invalid order lines data')
+        return
+      }
       try {
         const sandbox = { safeEval, orderLinesData }
         vm.createContext(sandbox)
